@@ -1,0 +1,17 @@
+
+services:
+  nordvpn-meshnet:
+    build: .
+    container_name: my-nordvpn
+    hostname: my-nordvpn-node
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun
+    environment:
+      - NORDVPN_TOKEN=${NORDVPN_TOKEN}
+      - CONNECT_MESHNET=${CONNECT_MESHNET:-on}
+      - VPN_COUNTRY=${VPN_COUNTRY:-}
+      - CUSTOM_DNS=${CUSTOM_DNS:-}
+    restart: unless-stopped
