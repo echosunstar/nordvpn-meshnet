@@ -12,6 +12,14 @@ services:
     environment:
       - NORDVPN_TOKEN=${NORDVPN_TOKEN}
       - CONNECT_MESHNET=${CONNECT_MESHNET:-on}
+      - MESHNET_NICKNAME=${MESHNET_NICKNAME:-}
       - VPN_COUNTRY=${VPN_COUNTRY:-}
       - CUSTOM_DNS=${CUSTOM_DNS:-}
+      - KILL_SWITCH=${KILL_SWITCH:-on}
+      - THREAT_PROTECTION=${THREAT_PROTECTION:-on}
+    volumes:
+      - nordvpn_data:/var/lib/nordvpn
     restart: unless-stopped
+
+volumes:
+  nordvpn_data:
