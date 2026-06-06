@@ -1,9 +1,21 @@
 # NordVPN Client with Meshnet & Privacy Auditing
 
 A Docker image that bundles the official NordVPN Linux CLI client. 
-This image natively supports multi-architecture deployments (**standard PCs/Servers `amd64`** and **Raspberry Pi `arm64`**) 
+This image  supports multi-architecture deployments (**standard PCs/Servers `amd64`** and **Raspberry Pi `arm64`**) 
 
-## Key Features
+# code build - provenance 
+
+The image is built in the cloud via GitHub Actions using Docker BuildKit SLSA provenance tracking. 
+
+The code is stored here: https://github.com/echosunstar/nordvpn-meshnet
+
+To verify the build provenance of the image, and verify the exact source repository and Git commit hash that generated this image, run the following command in your terminal:
+
+```
+docker buildx imagetools inspect alainc67/nordvpn-meshnet:latest --format "{{json .Provenance}}" | python3 -m json.tool | egrep "vcs:|invocationId"
+```
+
+# Key Features
 
 * Kill Switch enablement
 * Meshnet enablement
@@ -13,67 +25,93 @@ This image natively supports multi-architecture deployments (**standard PCs/Serv
 * Docker named volumes to persist the Meshnet identity to avoid proliferation
 * ping test to Nord  DNS servers to check things
 
----
-
-## Prerequisites
+# Prerequisites
 
 You must generate a **NordVPN Access Token** to authenticate the container without a password.
 
----
+# Deployment Setup
 
-## Deployment Setup
+## create a .env file 
 
-Create a `.env` file in your root folder - sample provided
+<pre>
+# Nord login token
+NORDVPN_TOKEN=your_token_here
 
-# How to Run
+# Toggle Meshnet: set to "on" or "off"
+CONNECT_MESHNET=on
 
-## Local Up & Build
-To build and spin up the container locally:
+# Toggle standard VPN routing: set a country code (e.g., US, UK, CA) or leave empty "" to disable
+VPN_COUNTRY=US
 
-docker compose up -d --build
+# Custom DNS Servers (Optional - leave blank for Nord's default)
+# Example: 1.1.1.1 or 1.1.1.1, 1.0.0.1
+CUSTOM_DNS=
 
-## Soft Restarts
-The entrypoint script is designed to handle soft restarts seamlessl. 
-If you run a soft restart, it safely flushes lingering sockets and virtual interfaces:
+# kill switch
+KILL_SWITCH=on
 
-docker compose restart
+# Note: Threat Protection cannot be used simultaneously with CUSTOM_DNS
+THREAT_PROTECTION=on
 
-## Verifying Status & Privacy Audits
+# Meshnet Nickname (Optional - Makes the node easy to identify in  Nord app)
+MESHNET_NICKNAME=my-docker-node
+
+</pre>
+
+## create a `docker-compose.yml` file next to the .env file :
+
+<pre>
+services:
+  nordvpn-client:
+    image: alainc67/nordvpn-meshnet:latest
+    container_name: my-nordvpn
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    devices:
+      - /dev/net/tun
+    environment:
+      - NORDVPN_TOKEN=${NORDVPN_TOKEN}
+      - CONNECT_MESHNET=${CONNECT_MESHNET:-on}
+      - VPN_COUNTRY=${VPN_COUNTRY:-}
+      - KILL_SWITCH=${KILL_SWITCH:-on}
+      - THREAT_PROTECTION=${THREAT_PROTECTION:-on}
+    volumes:
+      - nordvpn_config:/var/lib/nordvpn
+    restart: unless-stopped
+
+volumes:
+  nordvpn_config:
+    name: nordvpn_persistent_identity
+</pre>
+
+
+# Start the Container
+
+To pull the pre-built image from Docker Hub and start the container:
+
+```docker compose up -d```
+
+# Soft Restarts
+The entrypoint script is designed to handle soft restarts  (flushes lingering sockets and virtual interfaces)
+
+```docker compose restart```
+
+# Verifying Status & Privacy Audits
 Once initialized, inspect the container logs to review the privacy receipt. 
-TheThe script runs audits confirming your traffic is successfully masked and encrypted
+The script runs audits confirming your traffic is successfully masked and encrypted
 
-docker logs my-nordvpn
-Example Logs Output
-Plaintext
-========================================
-          PRIVACY & CONNECTION          
-========================================
-Technology: NORDLYNX
-Kill Switch: enabled
-Threat Protection Lite: enabled
-Analytics: disabled
-Meshnet: enabled
-----------------------------------------
-Masked IP:  2.56.191.84
-Location:   Dallas
-ISP/Owner:  AS62240 Clouvider
-Latency:    13.84 ms (to 103.86.96.100)
-----------------------------------------
-Active DNS: 103.86.96.100,103.86.99.100
-DNS Owner:  AS136787 TEFINCOM S.A.
-========================================
-Setup complete! Keeping container alive...
-(Note: TEFINCOM S.A. is the formal corporate entity behind NordVPN, proving your DNS routing remains completely within their ecosystem).
+```docker logs my-nordvpn```
 
 # Managing Meshnet Permissions
 
 Meshnet permissions (such as allowing other devices to route traffic through this container, file-sharing, or local LAN access) are managed directly from your main NordVPN app or Nord Web Dashboard.
-
 
 # Troubleshooting
 
 ## Meshnet Activation Fails
 Personal NordVPN accounts have a strict limit on Meshnet devices. 
 If you spun up this container previously without a persistent volume, you may have proliferated nodes that exceeded your limit.
+If Meshnet fails to activate, the container log will print a warning box detailing your current peer count:
 
-If Meshnet fails to activate, the container log will print a clear warning box detailing your current peer count:
+
