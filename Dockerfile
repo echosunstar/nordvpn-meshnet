@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 # Add NordVPN GPG key and repository manually
 RUN apt-get update && apt-get install -y gnupg && \
     curl -sS https://repo.nordvpn.com/gpg/nordvpn_public.asc | gpg --dearmor > /usr/share/keyrings/nordvpn-keyring.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/nordvpn-keyring.gpg arch=amd64] https://repo.nordvpn.com/deb/nordvpn/debian stable main" > /etc/apt/sources.list.d/nordvpn.list && \
+    echo "deb [signed-by=/usr/share/keyrings/nordvpn-keyring.gpg] https://repo.nordvpn.com/deb/nordvpn/debian stable main" > /etc/apt/sources.list.d/nordvpn.list && \
     apt-get update && \
     apt-get install -y nordvpn && \
     apt-get clean

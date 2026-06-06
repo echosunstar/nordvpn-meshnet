@@ -1,20 +1,20 @@
 #!/bin/bash
 
-# Meshnet Fix: Generate a unique machine-id if missing or empty
+# Soft-Restart : Clean up stale sockets and virtual interfaces
+echo "Cleaning up any stale processes or sockets..."
+rm -rf /run/nordvpn/*
+ip link delete nordlynx 2>/dev/null || true
+
+# Meshnet: Generate a unique machine-id if missing or empty
 if [ ! -s /etc/machine-id ]; then
     echo "Generating machine-id for Meshnet..."
     cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id
 fi
 
-# Soft-Restart : Clean up stale sockets and virtual interfaces from previous runs
-echo "Cleaning up any stale processes or sockets..."
-rm -rf /run/nordvpn/*
-ip link delete nordlynx 2>/dev/null || true
-
 # Create the runtime directory NordVPN expects
 mkdir -p /run/nordvpn
 
-# Start the NordVPN daemon and redirect logs to a file
+# Start the NordVPN daemon and redirect its logs to a file
 echo "Starting nordvpnd..."
 nordvpnd > /var/log/nordvpnd.log 2>&1 &
 
@@ -31,7 +31,7 @@ fi
 echo "Logging in to NordVPN..."
 echo "no" | nordvpn login --token "$NORDVPN_TOKEN"
 
-# disable all telemetry and tracking
+# Forcefully disable all telemetry and tracking
 nordvpn set analytics off
 
 # Let the daemon sync with API servers post-login
@@ -44,7 +44,6 @@ else
     nordvpn set killswitch off
 fi
 
-# Threat Protection conflicts with Custom DNS so handle it
 if [ -n "$CUSTOM_DNS" ]; then
     echo "Applying custom DNS: $CUSTOM_DNS..."
     nordvpn set threatprotectionlite off
@@ -59,6 +58,7 @@ else
 fi
 
 # Conditional Meshnet Configuration with Retry Logic
+MESHNET_FAILED_WARNING=false
 if [ "$CONNECT_MESHNET" = "on" ]; then
     echo "Enabling Meshnet..."
     
@@ -77,6 +77,19 @@ if [ "$CONNECT_MESHNET" = "on" ]; then
         echo "Meshnet activation pending daemon sync... Retrying in 5 seconds ($RETRY_COUNT/$MAX_RETRIES)"
         sleep 5
     done
+
+    # Handle success/failure
+    if [ "$MESHNET_SUCCESS" = false ]; then
+        echo "Warning: Could not enable Meshnet after $MAX_RETRIES attempts."
+        MESHNET_FAILED_WARNING=true
+    else
+        # Apply Nickname if Meshnet succeeded
+        if [ -n "$MESHNET_NICKNAME" ]; then
+            echo "Applying Meshnet nickname: $MESHNET_NICKNAME"
+            nordvpn meshnet set nickname "$MESHNET_NICKNAME"
+        fi
+
+    fi
 else
     echo "Meshnet option disabled. Skipping..."
     nordvpn set meshnet off
@@ -86,9 +99,7 @@ fi
 if [ -n "$VPN_COUNTRY" ]; then
     echo "Connecting to $VPN_COUNTRY servers..."
     nordvpn connect "$VPN_COUNTRY"
-    
     sleep 2
-    
     echo "Verifying secure routing..."
     PUBLIC_IP=$(curl -s ipinfo.io/ip)
     ISP_ORG=$(curl -s ipinfo.io/org)
@@ -101,7 +112,6 @@ FIRST_DNS=$(echo "$ACTIVE_DNS" | cut -d',' -f1)
 DNS_OWNER=$(curl -s "ipinfo.io/$FIRST_DNS/org")
 
 if [ -n "$VPN_COUNTRY" ]; then
-    # Keep ping testing strictly in-house to the VPN's DNS
     PING_AVG=$(ping -c 3 "$FIRST_DNS" | tail -1 | awk -F '/' '{print $5}')
 fi
 
@@ -109,7 +119,6 @@ echo "========================================"
 echo "          PRIVACY & CONNECTION          "
 echo "========================================"
 
-# Print key status lines directly from the Nord CLI
 nordvpn settings | grep -E "Technology|Meshnet|Kill Switch|Threat Protection Lite|Analytics"
 
 if [ -n "$VPN_COUNTRY" ]; then
@@ -123,7 +132,19 @@ echo "----------------------------------------"
 echo "Active DNS: $ACTIVE_DNS"
 echo "DNS Owner:  $DNS_OWNER"
 echo "========================================"
-echo "Setup complete! Keeping container alive..."
 
-# Keep the container running in the foreground
+if [ "$MESHNET_FAILED_WARNING" = true ]; then
+    echo " WARNING: MESHNET ACTIVATION FAILED!    "
+    echo " You requested Meshnet, but the NordVPN API rejected the connection."
+    echo " This usually happens when you hit the device Meshnet limit"
+    echo " basically old 'ghost' nodes may have accumulated in your account."
+    echo ""
+    echo " Current Meshnet Peers detected:"
+    nordvpn meshnet peer list || echo " (Could not fetch peer list - daemon rejected request)"
+    echo ""
+    echo " you may wish to use your regular Nord app to delete unused nodes to free up space,"
+    echo " then restart this container to get meshnet going"
+fi
+
+echo "Setup complete! Keeping container alive..."
 tail -f /dev/null
