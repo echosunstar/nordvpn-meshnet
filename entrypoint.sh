@@ -95,10 +95,29 @@ else
     nordvpn set meshnet off
 fi
 
-# Conditional VPN Country Routing
+# Conditional VPN Country Routing with Retry Logic
 if [ -n "$VPN_COUNTRY" ]; then
     echo "Connecting to $VPN_COUNTRY servers..."
-    nordvpn connect "$VPN_COUNTRY"
+    
+    MAX_VPN_RETRIES=5
+    VPN_RETRY_COUNT=0
+    VPN_CONNECTED=false
+
+    while [ $VPN_RETRY_COUNT -lt $MAX_VPN_RETRIES ]; do
+        if nordvpn connect "$VPN_COUNTRY"; then
+            VPN_CONNECTED=true
+            break
+        fi
+        VPN_RETRY_COUNT=$((VPN_RETRY_COUNT + 1))
+        echo "VPN connection failed. Trying another server in 5 seconds ($VPN_RETRY_COUNT/$MAX_VPN_RETRIES)..."
+        sleep 5
+    done
+
+    if [ "$VPN_CONNECTED" = false ]; then
+        echo "Error: Could not connect to $VPN_COUNTRY after $MAX_VPN_RETRIES attempts. Exiting so Docker can restart."
+        exit 1
+    fi
+
     sleep 2
     echo "Verifying secure routing..."
     PUBLIC_IP=$(curl -s ipinfo.io/ip)
