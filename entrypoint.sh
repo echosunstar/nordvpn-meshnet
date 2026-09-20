@@ -44,6 +44,14 @@ else
     nordvpn set killswitch off
 fi
 
+# Apply LAN Discovery
+if [ "$LAN_DISCOVERY" = "on" ]; then
+    echo "Enabling LAN discovery..."
+    nordvpn set lan-discovery on
+else
+    nordvpn set lan-discovery off
+fi
+
 if [ -n "$CUSTOM_DNS" ]; then
     echo "Applying custom DNS: $CUSTOM_DNS..."
     nordvpn set threatprotectionlite off
