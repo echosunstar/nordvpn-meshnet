@@ -207,6 +207,76 @@ if [ "$MESHNET_FAILED_WARNING" = true ]; then
     nordvpn meshnet peer list || true
 fi
 
+# ==============================================================================
+# DIAGNOSTIC ROUTING TRACE FUNCTION
+# ==============================================================================
+
+vpn_trace() {
+    echo "🔍 Tracing NordVPN Routing..."
+    
+    # 0. Double-VPN Configuration Guard
+    if [ "${DOUBLE_VPN:-off}" = "on" ] && [ -n "$VPN_COUNTRY" ]; then
+        echo "⚠️  Double-VPN Validation Check..."
+        CURRENT_SERVER=$(nordvpn status | grep -i '^Hostname:' | awk '{print $2}' | tr -d '\r')
+        if [[ "$CURRENT_SERVER" != *"$VPN_COUNTRY"* ]] && [[ -n "$VPN_COUNTRY" ]]; then
+            echo "❌ WARNING: Requested country ($VPN_COUNTRY) does not match the active double-vpn anchor node ($CURRENT_SERVER)."
+            echo "   Failure: When using Double VPN, ensure your VPN_COUNTRY targets the entry/first country in the chain."
+            return 1
+        fi
+    fi
+
+    # 1. Get the current server hostname
+    SERVER=$(nordvpn status | grep -i '^Hostname:' | awk '{print $2}' | tr -d '\r')
+    
+    if [ -z "$SERVER" ]; then
+        SERVER=$(nordvpn status | grep -i 'Current server' | awk '{print $3}' | tr -d '\r')
+    fi
+    
+    if [ -z "$SERVER" ]; then
+        echo "❌ VPN is not connected or hostname could not be parsed."
+        return 1
+    fi
+    
+    # 2. Get Exit Node
+    EXIT_IP=$(curl -s --interface nordlynx ipinfo.io/ip)
+    EXIT_CC=$(curl -s --interface nordlynx ipinfo.io/country | tr -d '\n')
+    
+    # 3. Get Entry Node (Using standard 'getent hosts' instead of dig)
+    ENTRY_IP=$(getent hosts "$SERVER" | awk '{print $1}' | head -n 1)
+    if [ -z "$ENTRY_IP" ]; then
+        ENTRY_IP="Unknown"
+    fi
+    
+    ENTRY_CC=$(curl -s ipinfo.io/"$ENTRY_IP"/country | tr -d '\n')
+    
+    echo "✅ Routing Path for $SERVER:"
+    
+    # 4. Format output based on hop type
+    if [[ "$SERVER" == *"-"* ]] || [ "${DOUBLE_VPN:-off}" = "on" ]; then
+        echo "💻 PC  -->  🏢 Entry: $ENTRY_CC ($ENTRY_IP)  -->  🌐 Exit: $EXIT_CC ($EXIT_IP)  -->  🌍 Internet [Double Hop]"
+    else
+        if [ "$ENTRY_IP" == "$EXIT_IP" ]; then
+            echo "💻 PC  -->  🛡️  VPN: $EXIT_CC ($EXIT_IP)  -->  🌍 Internet [Single Hop]"
+        else
+            echo "💻 PC  -->  🛡️  VPN Exit: $EXIT_CC ($EXIT_IP)  -->  🌍 Internet [Single Hop]"
+            echo "            *(Note: Internal Entry IP is $ENTRY_IP)*"
+        fi
+    fi
+
+    # 5. Print Active Routing Table
+    echo ""
+    echo "----------------------------------------"
+    echo "🔀 Active Kernel Routing Table (ip route):"
+    echo "----------------------------------------"
+    ip route show
+    echo "========================================"
+}
+
+# 📍 1. AUTOMATIC INVOCATION ON BOOT:
+if [ -n "$CONNECT_TARGET" ] || [ "${DOUBLE_VPN:-off}" = "on" ]; then
+    vpn_trace || true
+fi
+
 echo "========================================"
 echo "Setup complete! Keeping container alive..."
 echo "========================================"
