@@ -22,7 +22,20 @@ mkdir -p /run/nordvpn
 # Start the NordVPN daemon in background
 echo "Starting nordvpnd..."
 nordvpnd > /var/log/nordvpnd.log 2>&1 &
-sleep 5
+
+# Wait actively for the daemon socket to be created (max 10 seconds)
+echo "Waiting for nordvpnd socket..."
+TIMEOUT=10
+while [ ! -S /run/nordvpn/nordvpnd.sock ]; do
+    TIMEOUT=$((TIMEOUT - 1))
+    if [ $TIMEOUT -le 0 ]; then
+        echo "Error: nordvpnd failed to start or create its socket within 10 seconds."
+        cat /var/log/nordvpnd.log
+        exit 1
+    fi
+    sleep 1
+done
+echo "nordvpnd socket is ready."
 
 # Validate Access Token
 if [ -z "$NORDVPN_TOKEN" ]; then
