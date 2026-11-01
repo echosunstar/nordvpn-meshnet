@@ -7,10 +7,6 @@ echo " Build Date : ${IMAGE_BUILD_DATE:-Unknown}"
 echo " Git Commit : ${IMAGE_VCS_REF:-Unknown}"
 echo "=========================================================="
 
-echo "=========================================================="
-echo " Starting NordVPN Client with Meshnet & Hardened Killswitch"
-echo "=========================================================="
-
 # Soft-Restart: Clean up stale sockets and virtual interfaces
 echo "Cleaning up any stale processes or sockets..."
 rm -rf /run/nordvpn/*
@@ -49,12 +45,12 @@ if [ -z "$NORDVPN_TOKEN" ]; then
     exit 1
 fi
 
-# Authenticate with NordVPN
+# Authenticate with NordVPN cleanly by piping 'no' to any prompts
 echo "Logging in to NordVPN..."
-echo "no" | nordvpn login --token "$NORDVPN_TOKEN"
+yes no | nordvpn login --token "$NORDVPN_TOKEN" || true
 
 # Forcefully disable telemetry and tracking
-nordvpn set analytics off
+nordvpn set analytics off 2>/dev/null || true
 sleep 3
 
 # Apply Built-in Kill Switch
@@ -72,18 +68,12 @@ else
     nordvpn set lan-discovery off
 fi
 
-# Apply DNS Settings
+# Apply Custom DNS if specified
 if [ -n "$CUSTOM_DNS" ]; then
     echo "Applying custom DNS: $CUSTOM_DNS..."
-    nordvpn set threatprotectionlite off
     nordvpn set dns $CUSTOM_DNS
 else
     echo "Using default NordVPN DNS servers."
-    if [ "${THREAT_PROTECTION:-on}" = "on" ]; then
-        nordvpn set threatprotectionlite on
-    else
-        nordvpn set threatprotectionlite off
-    fi
 fi
 
 # ==============================================================================
@@ -92,39 +82,28 @@ fi
 if [ "${HARDEN_FIREWALL:-off}" = "on" ]; then
     echo "Hardened kernel firewall requested. Detecting primary interface..."
 
-    # Auto-detect the default outgoing interface (defaults to eth0 if detection fails)
     PRIMARY_IFACE=$(ip route show default 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="dev") print $(i+1)}' | head -n1)
     PRIMARY_IFACE="${PRIMARY_IFACE:-eth0}"
 
     echo "Enforcing kernel-level firewall on ${PRIMARY_IFACE}..."
 
-    # Flush pre-existing OUTPUT rules
     iptables -F OUTPUT 2>/dev/null || true
 
-    # 1. Allow local loopback and VPN tunnel
     iptables -A OUTPUT -o lo -j ACCEPT
     iptables -A OUTPUT -o nordlynx -j ACCEPT
 
-    # 2. Allow standard RFC1918 private subnets (WebUI, local scripts, Arr stack)
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 127.0.0.0/8 -j ACCEPT
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 10.0.0.0/8 -j ACCEPT
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 172.16.0.0/12 -j ACCEPT
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 192.168.0.0/16 -j ACCEPT
 
-    # 3. Allow DNS resolution queries
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -p udp --dport 53 -j ACCEPT
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -p tcp --dport 53 -j ACCEPT
 
-    # 4. Allow NordVPN authentication and API communication (HTTPS)
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -p tcp --dport 443 -j ACCEPT
-
-    # 5. Allow standard NordVPN tunnel handshakes
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -p udp -m multiport --dports 1194,51820 -j ACCEPT
-
-    # 6. Allow dynamic UDP range for Meshnet WebRTC / STUN / ICE traversal
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -p udp --dport 1024:65535 -m comment --comment "Meshnet-STUN" -j ACCEPT
 
-    # 7. Block unencrypted public TCP/UDP traffic on the primary adapter
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -p tcp -j DROP
     iptables -A OUTPUT -o "$PRIMARY_IFACE" -j DROP
 else
@@ -206,14 +185,12 @@ if [ -n "$CONNECT_TARGET" ] || [ "${DOUBLE_VPN:-off}" = "on" ]; then
     CITY=$(curl -s --interface nordlynx ipinfo.io/city || echo "Unknown")
 fi
 
-# Extract DNS and Ping data
 ACTIVE_DNS=$(grep nameserver /etc/resolv.conf | awk '{print $2}' | paste -sd "," - || true)
-FIRST_DNS=$(echo "$ACTIVE_DNS" | cut -d',' -f1)
 
 echo "========================================"
 echo "          PRIVACY & CONNECTION          "
 echo "========================================"
-nordvpn settings | grep -E "Technology|Meshnet|Kill Switch|Threat Protection Lite|Analytics" || true
+nordvpn settings | grep -E "Technology|Meshnet|Kill Switch|Analytics" || true
 
 if [ -n "$CONNECT_TARGET" ] || [ "${DOUBLE_VPN:-off}" = "on" ]; then
     echo "----------------------------------------"
@@ -230,5 +207,9 @@ if [ "$MESHNET_FAILED_WARNING" = true ]; then
     nordvpn meshnet peer list || true
 fi
 
+echo "========================================"
 echo "Setup complete! Keeping container alive..."
-tail -f /dev/null
+echo "========================================"
+
+# Keep the container running indefinitely as PID 1
+exec tail -f /dev/null
