@@ -3,6 +3,12 @@ set -eo pipefail
 
 echo "=========================================================="
 echo " Starting NordVPN Client with Meshnet & Hardened Killswitch"
+echo " Build Date : ${IMAGE_BUILD_DATE:-Unknown}"
+echo " Git Commit : ${IMAGE_VCS_REF:-Unknown}"
+echo "=========================================================="
+
+echo "=========================================================="
+echo " Starting NordVPN Client with Meshnet & Hardened Killswitch"
 echo "=========================================================="
 
 # Soft-Restart: Clean up stale sockets and virtual interfaces

@@ -3,6 +3,16 @@ FROM ubuntu:22.04
 # Prevent interactive prompts during installation
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Add build arguments for metadata tracking
+ARG BUILD_DATE=unknown
+ARG VCS_REF=unknown
+
+LABEL org.opencontainers.image.created="${BUILD_DATE}" \
+      org.opencontainers.image.revision="${VCS_REF}"
+
+ENV IMAGE_BUILD_DATE="${BUILD_DATE}" \
+    IMAGE_VCS_REF="${VCS_REF}"
+
 # Install core networking dependencies
 RUN apt-get update && apt-get install -y \
     curl \
