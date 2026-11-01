@@ -14,8 +14,10 @@ services:
       - CONNECT_MESHNET=${CONNECT_MESHNET:-on}
       - MESHNET_NICKNAME=${MESHNET_NICKNAME:-}
       - VPN_COUNTRY=${VPN_COUNTRY:-}
+      - DOUBLE_VPN=${DOUBLE_VPN:-off}
       - CUSTOM_DNS=${CUSTOM_DNS:-}
       - KILL_SWITCH=${KILL_SWITCH:-on}
+      - HARDEN_FIREWALL=${HARDEN_FIREWALL:-off}
       - THREAT_PROTECTION=${THREAT_PROTECTION:-on}
     volumes:
       - nordvpn_data:/var/lib/nordvpn
