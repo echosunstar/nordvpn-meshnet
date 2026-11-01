@@ -9,13 +9,13 @@ echo "=========================================================="
 
 # Soft-Restart: Clean up stale sockets and virtual interfaces
 echo "Cleaning up any stale processes or sockets..."
-rm -rf /run/nordvpn/*
+rm -rf /run/nordvpn/* || true
 ip link delete nordlynx 2>/dev/null || true
 
 # Meshnet: Generate a unique machine-id if missing or empty
 if [ ! -s /etc/machine-id ]; then
     echo "Generating machine-id for Meshnet..."
-    cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id
+    cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id || true
 fi
 
 # Create runtime directory NordVPN expects
@@ -55,23 +55,23 @@ sleep 3
 
 # Apply Built-in Kill Switch
 if [ "${KILL_SWITCH:-on}" = "on" ]; then
-    nordvpn set killswitch on
+    nordvpn set killswitch on 2>/dev/null || true
 else
-    nordvpn set killswitch off
+    nordvpn set killswitch off 2>/dev/null || true
 fi
 
 # Apply LAN Discovery
 if [ "${LAN_DISCOVERY:-on}" = "on" ]; then
     echo "Enabling LAN discovery..."
-    nordvpn set lan-discovery on
+    nordvpn set lan-discovery on 2>/dev/null || true
 else
-    nordvpn set lan-discovery off
+    nordvpn set lan-discovery off 2>/dev/null || true
 fi
 
 # Apply Custom DNS if specified
 if [ -n "$CUSTOM_DNS" ]; then
     echo "Applying custom DNS: $CUSTOM_DNS..."
-    nordvpn set dns $CUSTOM_DNS
+    nordvpn set dns $CUSTOM_DNS 2>/dev/null || true
 else
     echo "Using default NordVPN DNS servers."
 fi
@@ -89,23 +89,23 @@ if [ "${HARDEN_FIREWALL:-off}" = "on" ]; then
 
     iptables -F OUTPUT 2>/dev/null || true
 
-    iptables -A OUTPUT -o lo -j ACCEPT
-    iptables -A OUTPUT -o nordlynx -j ACCEPT
+    iptables -A OUTPUT -o lo -j ACCEPT 2>/dev/null || true
+    iptables -A OUTPUT -o nordlynx -j ACCEPT 2>/dev/null || true
 
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 127.0.0.0/8 -j ACCEPT
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 10.0.0.0/8 -j ACCEPT
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 172.16.0.0/12 -j ACCEPT
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 192.168.0.0/16 -j ACCEPT
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 127.0.0.0/8 -j ACCEPT 2>/dev/null || true
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 10.0.0.0/8 -j ACCEPT 2>/dev/null || true
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 172.16.0.0/12 -j ACCEPT 2>/dev/null || true
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -d 192.168.0.0/16 -j ACCEPT 2>/dev/null || true
 
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p udp --dport 53 -j ACCEPT
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p tcp --dport 53 -j ACCEPT
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p udp --dport 53 -j ACCEPT 2>/dev/null || true
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p tcp --dport 53 -j ACCEPT 2>/dev/null || true
 
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p tcp --dport 443 -j ACCEPT
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p udp -m multiport --dports 1194,51820 -j ACCEPT
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p udp --dport 1024:65535 -m comment --comment "Meshnet-STUN" -j ACCEPT
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p udp -m multiport --dports 1194,51820 -j ACCEPT 2>/dev/null || true
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p udp --dport 1024:65535 -m comment --comment "Meshnet-STUN" -j ACCEPT 2>/dev/null || true
 
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p tcp -j DROP
-    iptables -A OUTPUT -o "$PRIMARY_IFACE" -j DROP
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -p tcp -j DROP 2>/dev/null || true
+    iptables -A OUTPUT -o "$PRIMARY_IFACE" -j DROP 2>/dev/null || true
 else
     echo "Hardened kernel firewall disabled (relying on standard NordVPN killswitch)."
 fi
@@ -121,8 +121,8 @@ if [ "${CONNECT_MESHNET:-on}" = "on" ]; then
     MESHNET_SUCCESS=false
 
     while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-        nordvpn set meshnet on
-        if nordvpn settings | grep -q "Meshnet: enabled"; then
+        nordvpn set meshnet on 2>/dev/null || true
+        if nordvpn settings 2>/dev/null | grep -q "Meshnet: enabled"; then
             echo "Meshnet successfully enabled!"
             MESHNET_SUCCESS=true
             break
@@ -138,12 +138,12 @@ if [ "${CONNECT_MESHNET:-on}" = "on" ]; then
     else
         if [ -n "$MESHNET_NICKNAME" ]; then
             echo "Applying Meshnet nickname: $MESHNET_NICKNAME"
-            nordvpn meshnet set nickname "$MESHNET_NICKNAME"
+            nordvpn meshnet set nickname "$MESHNET_NICKNAME" 2>/dev/null || true
         fi
     fi
 else
     echo "Meshnet option disabled. Skipping..."
-    nordvpn set meshnet off
+    nordvpn set meshnet off 2>/dev/null || true
 fi
 
 # ==============================================================================
@@ -185,12 +185,12 @@ if [ -n "$CONNECT_TARGET" ] || [ "${DOUBLE_VPN:-off}" = "on" ]; then
     CITY=$(curl -s --interface nordlynx ipinfo.io/city || echo "Unknown")
 fi
 
-ACTIVE_DNS=$(grep nameserver /etc/resolv.conf | awk '{print $2}' | paste -sd "," - || true)
+ACTIVE_DNS=$(grep nameserver /etc/resolv.conf 2>/dev/null | awk '{print $2}' | paste -sd "," - || true)
 
 echo "========================================"
 echo "          PRIVACY & CONNECTION          "
 echo "========================================"
-nordvpn settings | grep -E "Technology|Meshnet|Kill Switch|Analytics" || true
+nordvpn settings 2>/dev/null | grep -E "Technology|Meshnet|Kill Switch|Analytics" || true
 
 if [ -n "$CONNECT_TARGET" ] || [ "${DOUBLE_VPN:-off}" = "on" ]; then
     echo "----------------------------------------"
@@ -204,7 +204,7 @@ echo "========================================"
 
 if [ "$MESHNET_FAILED_WARNING" = true ]; then
     echo " WARNING: MESHNET ACTIVATION FAILED!    "
-    nordvpn meshnet peer list || true
+    nordvpn meshnet peer list 2>/dev/null || true
 fi
 
 # ==============================================================================
@@ -214,22 +214,18 @@ fi
 vpn_trace() {
     echo "🔍 Tracing NordVPN Routing..."
     
-    # 0. Double-VPN Configuration Guard
     if [ "${DOUBLE_VPN:-off}" = "on" ] && [ -n "$VPN_COUNTRY" ]; then
         echo "⚠️  Double-VPN Validation Check..."
-        CURRENT_SERVER=$(nordvpn status | grep -i '^Hostname:' | awk '{print $2}' | tr -d '\r')
+        CURRENT_SERVER=$(nordvpn status 2>/dev/null | grep -i '^Hostname:' | awk '{print $2}' | tr -d '\r')
         if [[ "$CURRENT_SERVER" != *"$VPN_COUNTRY"* ]] && [[ -n "$VPN_COUNTRY" ]]; then
-            echo "❌ WARNING: Requested country ($VPN_COUNTRY) does not match the active double-vpn anchor node ($CURRENT_SERVER)."
-            echo "   Failure: When using Double VPN, ensure your VPN_COUNTRY targets the entry/first country in the chain."
+            echo "❌ WARNING: Requested country ($VPN_COUNTRY) does not match active double-vpn anchor node ($CURRENT_SERVER)."
             return 1
         fi
     fi
 
-    # 1. Get the current server hostname
-    SERVER=$(nordvpn status | grep -i '^Hostname:' | awk '{print $2}' | tr -d '\r')
-    
+    SERVER=$(nordvpn status 2>/dev/null | grep -i '^Hostname:' | awk '{print $2}' | tr -d '\r')
     if [ -z "$SERVER" ]; then
-        SERVER=$(nordvpn status | grep -i 'Current server' | awk '{print $3}' | tr -d '\r')
+        SERVER=$(nordvpn status 2>/dev/null | grep -i 'Current server' | awk '{print $3}' | tr -d '\r')
     fi
     
     if [ -z "$SERVER" ]; then
@@ -237,21 +233,17 @@ vpn_trace() {
         return 1
     fi
     
-    # 2. Get Exit Node
-    EXIT_IP=$(curl -s --interface nordlynx ipinfo.io/ip)
-    EXIT_CC=$(curl -s --interface nordlynx ipinfo.io/country | tr -d '\n')
+    EXIT_IP=$(curl -s --interface nordlynx ipinfo.io/ip || echo "Unknown")
+    EXIT_CC=$(curl -s --interface nordlynx ipinfo.io/country | tr -d '\n' || echo "Unknown")
     
-    # 3. Get Entry Node (Using standard 'getent hosts' instead of dig)
-    ENTRY_IP=$(getent hosts "$SERVER" | awk '{print $1}' | head -n 1)
+    ENTRY_IP=$(getent hosts "$SERVER" 2>/dev/null | awk '{print $1}' | head -n 1)
     if [ -z "$ENTRY_IP" ]; then
         ENTRY_IP="Unknown"
     fi
     
-    ENTRY_CC=$(curl -s ipinfo.io/"$ENTRY_IP"/country | tr -d '\n')
+    ENTRY_CC=$(curl -s ipinfo.io/"$ENTRY_IP"/country | tr -d '\n' || echo "Unknown")
     
     echo "✅ Routing Path for $SERVER:"
-    
-    # 4. Format output based on hop type
     if [[ "$SERVER" == *"-"* ]] || [ "${DOUBLE_VPN:-off}" = "on" ]; then
         echo "💻 PC  -->  🏢 Entry: $ENTRY_CC ($ENTRY_IP)  -->  🌐 Exit: $EXIT_CC ($EXIT_IP)  -->  🌍 Internet [Double Hop]"
     else
@@ -263,7 +255,6 @@ vpn_trace() {
         fi
     fi
 
-    # 5. Print Active Routing Table
     echo ""
     echo "----------------------------------------"
     echo "🔀 Active Kernel Routing Table (ip route):"
@@ -272,7 +263,7 @@ vpn_trace() {
     echo "========================================"
 }
 
-# 📍 1. AUTOMATIC INVOCATION ON BOOT:
+# Run trace if connected, otherwise ignore failure so container doesn't exit
 if [ -n "$CONNECT_TARGET" ] || [ "${DOUBLE_VPN:-off}" = "on" ]; then
     vpn_trace || true
 fi
@@ -281,5 +272,5 @@ echo "========================================"
 echo "Setup complete! Keeping container alive..."
 echo "========================================"
 
-# Keep the container running indefinitely as PID 1
+# Keep container running indefinitely as PID 1 without dropping out
 exec tail -f /dev/null
